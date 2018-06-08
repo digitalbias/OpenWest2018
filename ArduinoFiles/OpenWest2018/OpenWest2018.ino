@@ -23,19 +23,31 @@
 #define PIXEL_COUNT   2
 #define PIXEL_TYPE    NEO_GRB + NEO_KHZ800
 
+#include <ArduinoJson.h>
+const size_t bufferSize = JSON_OBJECT_SIZE(4) + 60;
+DynamicJsonBuffer jsonBuffer(bufferSize);
+
+
 /************************* WiFi Access Point *********************************/
 // Change these to your personal wifi
 
 #define WLAN_SSID       "OPENWEST-GUEST"
 #define WLAN_PASS       "Openwest2018!"
 
-/************************* Adafruit.io Setup *********************************/
+/************************* OpenWest 2018 Setup *********************************/
 // you need to create an account at adafruit.io to use their server
+//
+// #define AIO_SERVER      "10.155.0.214"         // IP or URL for MQTT server
+// #define AIO_SERVERPORT  1883                   // use 8883 for SSL
+// #define AIO_USERNAME    "test"                 // Adafruit.io username
+// #define AIO_KEY         "1234567890"           // Adafruit.io key
+//
 
-#define AIO_SERVER      "10.155.0.214"         // IP or URL for MQTT server
-#define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "test"                 // Adafruit.io username
-#define AIO_KEY         "1234567890"           // Adafruit.io key
+/************************* Adafruit.io Setup *********************************/
+#define AIO_SERVER      "io.adafruit.com"                       // IP or URL for MQTT server
+#define AIO_SERVERPORT  1883                                    // use 8883 for SSL
+#define AIO_USERNAME    "digitalbias"                           // Adafruit.io username
+#define AIO_KEY         "xxxxx"      // Adafruit.io key
 
 /************ Global State (you don't need to change this!) ******************/
 
@@ -51,14 +63,14 @@ Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO
 
 // Setup a feed called 'photocell' for publishing.
 // Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
-//Adafruit_MQTT_Publish photocell = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/photocell");
+// Adafruit_MQTT_Publish photocell = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/digitalbias");
 
 // Setup a feeds for subscribing to changes. Set QoS to 1 to make sure you get messages at least once.
 // You can add your own feeds here. You need to add a check to the main loop below to handle your feed data.
-Adafruit_MQTT_Subscribe color1 = Adafruit_MQTT_Subscribe(&mqtt, "feeds/color1",1);
-Adafruit_MQTT_Subscribe color2 = Adafruit_MQTT_Subscribe(&mqtt, "feeds/color2",1);
-Adafruit_MQTT_Subscribe effect = Adafruit_MQTT_Subscribe(&mqtt, "feeds/effect",1);
-Adafruit_MQTT_Subscribe effectspeed = Adafruit_MQTT_Subscribe(&mqtt, "feeds/effectspeed",1);
+Adafruit_MQTT_Subscribe led_feed = Adafruit_MQTT_Subscribe(&mqtt, "digitalbias/feeds/openwest.led-feed",1); // defined in group "openwest" as "led_feed"
+
+// Workaround publish queue
+Adafruit_MQTT_Publish led_feed_get = Adafruit_MQTT_Publish(&mqtt, "digitalbias/feeds/openwest.led-feed/get",1);
 
 /*************************** Sketch Code ************************************/
 
@@ -121,11 +133,7 @@ void setup() {
   Serial.println("IP address: "); Serial.println(WiFi.localIP());
 
   // Setup MQTT subscription for onoff feed.
-  mqtt.subscribe(&color1);
-  mqtt.subscribe(&color2);
-  mqtt.subscribe(&effect);
-  mqtt.subscribe(&effectspeed);
-  //}
+  mqtt.subscribe(&led_feed);
 }
 
 uint32_t x=0;
@@ -141,31 +149,16 @@ void loop() {
 
   Adafruit_MQTT_Subscribe *subscription;
   while ((subscription = mqtt.readSubscription(10))) {
-    if (subscription == &color1) {
-      Serial.print(F("Got color1: "));
-      Serial.println((char *)color1.lastread);
-      Color1 = x2i((char *)color1.lastread);
-      leds[0] = Color1;
-      //FastLED.show();
-    }
-    if (subscription == &color2) {
-      Serial.print(F("Got color2: "));
-      Serial.println((char *)color2.lastread);
-      Color2 = x2i((char *)color2.lastread);
-      leds[1] = Color2;
-      //FastLED.show();
-    }
-    if (subscription == &effect) {
-      Serial.print(F("Got effect: "));
-      Serial.println((char *)effect.lastread);
-      Effect = atoi((char *)effect.lastread);
-      counter1 = 0;
-      counter2 = 0;
-    }
-    if (subscription == &effectspeed) {
-      Serial.print(F("Got speed: "));
-      Serial.println((char *)effectspeed.lastread);
-      Speed = atoi((char *)effectspeed.lastread);
+    if (subscription == &led_feed) {
+      Serial.print(F("Got led data: "));
+      Serial.println((char *)led_feed.lastread);      
+      JsonObject& root = jsonBuffer.parseObject((char *)led_feed.lastread); // "{"value":{"leds":["552100","001111"],"speed":5,"effect":4}}"
+      
+      const char* leds = root["leds"]; // ["552100","001111"]
+      Color1 = x2i(strdup(root["leds"][0]));
+      Color2 = x2i(strdup(root["leds"][1]));
+      Speed = root["speed"]; // 5
+      Effect = root["effect"]; // 1
     }
   }
 
@@ -312,27 +305,32 @@ void MQTT_connect() {
        }
   }
   Serial.println("MQTT Connected!");
+  Adafruit_MQTT_Publish led_feed_get = Adafruit_MQTT_Publish(&mqtt, "digitalbias/feeds/openwest.led-feed/get",1);
+  
+  led_feed_get.publish('\0');
+  delay(1000);
 }
 
 int x2i(char *s) //convert hex string to integer
 {
- int x = 0;
- for(;;) {
-   char c = *s;
-   if (c >= '0' && c <= '9') {
+  int x = 0;
+  for(;;) {
+    char c = *s;
+    if (c >= '0' && c <= '9') {
       x *= 16;
       x += c - '0'; 
-   }
-   else if (c >= 'A' && c <= 'F') {
+    }
+    else if (c >= 'A' && c <= 'F') {
       x *= 16;
       x += (c - 'A') + 10; 
-   }
-   else if (c >= 'a' && c <= 'f') {
+    }
+    else if (c >= 'a' && c <= 'f') {
       x *= 16;
       x += (c - 'a') + 10;
+    }
+    else break;
+    s++;
+  }
+  return x;
 }
-   else break;
-   s++;
- }
- return x;
-}
+
