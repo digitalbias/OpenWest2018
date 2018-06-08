@@ -203,7 +203,8 @@ void loop() {
         }
         break;
       case 3: //Pulse
-        if(counter2 == 0){ //count up
+        if (counter2 == 0)
+        { //count up
           counter1 += Speed;
           if(counter1 > 255){
             counter2 = 1;
@@ -259,17 +260,6 @@ void loop() {
   
   FastLED.show();
 
-/*
-  // This is sample code for publishing to the MQTT server
-  Serial.print(F("\nSending photocell val "));
-  Serial.print(x);
-  Serial.print("...");
-  if (! photocell.publish(x++)) {
-    Serial.println(F("Failed"));
-  } else {
-    Serial.println(F("OK!"));
-  }
-*/
   // ping the server to keep the mqtt connection alive
   // NOT required if you are publishing once every KEEPALIVE seconds
   if(millis() > nextPing){
@@ -307,7 +297,6 @@ void MQTT_connect() {
        }
   }
   Serial.println("MQTT Connected!");
-  Adafruit_MQTT_Publish led_feed_get = Adafruit_MQTT_Publish(&mqtt, "digitalbias/feeds/openwest.led-feed/get",1);
   
   led_feed_get.publish('\0');
   delay(1000);
