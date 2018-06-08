@@ -203,13 +203,13 @@ void loop() {
         }
         break;
       case 3: //Pulse
-        if (counter2 == 0) { //count up
+        if(counter2 == 0){ //count up
           counter1 += Speed;
           if(counter1 > 255){
             counter2 = 1;
             counter1 = 255;
           }
-        } else{
+        }else{
           counter1 -= Speed;
           if(counter1 < 0){ //count down
             counter2 = 0;
